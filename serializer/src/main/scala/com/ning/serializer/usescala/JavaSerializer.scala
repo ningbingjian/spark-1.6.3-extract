@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package com.ning
+package com.ning.serializer.usescala
 
 import java.io._
 import java.nio.ByteBuffer
 
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
-private[spark] class JavaSerializationStream(
+private class JavaSerializationStream(
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
   extends SerializationStream {
   private val objOut = new ObjectOutputStream(out)
@@ -86,7 +87,7 @@ private object JavaDeserializationStream {
   )
 }
 
-private[spark] class JavaSerializerInstance(
+private class JavaSerializerInstance(
     counterReset: Int, extraDebugInfo: Boolean, defaultClassLoader: ClassLoader)
   extends SerializerInstance {
 
@@ -139,13 +140,29 @@ class JavaSerializer() extends Serializer with Externalizable {
     new JavaSerializerInstance(counterReset, extraDebugInfo, classLoader)
   }
 
-  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+  override def writeExternal(out: ObjectOutput): Unit = tryOrIOException {
     out.writeInt(counterReset)
     out.writeBoolean(extraDebugInfo)
   }
 
-  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+  override def readExternal(in: ObjectInput): Unit = tryOrIOException {
     counterReset = in.readInt()
     extraDebugInfo = in.readBoolean()
+  }
+  /**
+    * Execute a block of code that returns a value, re-throwing any non-fatal uncaught
+    * exceptions as IOException. This is used when implementing Externalizable and Serializable's
+    * read and write methods, since Java's serializer will not report non-IOExceptions properly;
+    * see SPARK-4080 for more context.
+    */
+  def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException =>
+        throw e
+      case NonFatal(e) =>
+        throw new IOException(e)
+    }
   }
 }

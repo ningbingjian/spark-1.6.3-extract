@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.ning
+package com.ning.serializer.usescala
 
 import java.io._
 import java.nio.ByteBuffer
@@ -23,27 +23,10 @@ import java.nio.ByteBuffer
 import scala.reflect.ClassTag
 
 /**
- * :: DeveloperApi ::
- * A serializer. Because some serialization libraries are not thread safe, this class is used to
- * create [[org.apache.spark.serializer.SerializerInstance]] objects that do the actual
- * serialization and are guaranteed to only be called from one thread at a time.
- *
- * Implementations of this trait should implement:
- *
- * 1. a zero-arg constructor or a constructor that accepts a [[org.apache.spark.SparkConf]]
- * as parameter. If both constructors are defined, the latter takes precedence.
- *
- * 2. Java serialization interface.
- *
- * Note that serializers are not required to be wire-compatible across different versions of Spark.
- * They are intended to be used to serialize/de-serialize data within a single Spark application.
- */
+  * 序列化工具类 主要负责返回序列化实例 类似Java工厂类
+  */
 abstract class Serializer {
-
-  /**
-   * Default ClassLoader to use in deserialization. Implementations of [[Serializer]] should
-   * make sure it is using this when set.
-   */
+  //默认类加载器
   @volatile protected var defaultClassLoader: Option[ClassLoader] = None
 
   /**
@@ -59,37 +42,6 @@ abstract class Serializer {
   /** Creates a new [[SerializerInstance]]. */
   def newInstance(): SerializerInstance
 
-  /**
-   * :: Private ::
-   * Returns true if this serializer supports relocation of its serialized objects and false
-   * otherwise. This should return true if and only if reordering the bytes of serialized objects
-   * in serialization stream output is equivalent to having re-ordered those elements prior to
-   * serializing them. More specifically, the following should hold if a serializer supports
-   * relocation:
-   *
-   * {{{
-   * serOut.open()
-   * position = 0
-   * serOut.write(obj1)
-   * serOut.flush()
-   * position = # of bytes writen to stream so far
-   * obj1Bytes = output[0:position-1]
-   * serOut.write(obj2)
-   * serOut.flush()
-   * position2 = # of bytes written to stream so far
-   * obj2Bytes = output[position:position2-1]
-   * serIn.open([obj2bytes] concatenate [obj1bytes]) should return (obj2, obj1)
-   * }}}
-   *
-   * In general, this property should hold for serializers that are stateless and that do not
-   * write special metadata at the beginning or end of the serialization stream.
-   *
-   * This API is private to Spark; this method should not be overridden in third-party subclasses
-   * or called in user code and is subject to removal in future Spark releases.
-   *
-   * See SPARK-7311 for more details.
-   */
-  private[spark] def supportsRelocationOfSerializedObjects: Boolean = false
 }
 
 
@@ -110,9 +62,10 @@ object Serializer {
  *
  * It is legal to create multiple serialization / deserialization streams from the same
  * SerializerInstance as long as those streams are all used within the same thread.
+  *
+  * 序列化实例
+  * 定义实例的抽象方法 包括序列化对象，反序列化对象 将输出流包装为序列化流 将输入流包装为序列化流
  */
-@DeveloperApi
-@NotThreadSafe
 abstract class SerializerInstance {
   def serialize[T: ClassTag](t: T): ByteBuffer
 
@@ -128,8 +81,9 @@ abstract class SerializerInstance {
 /**
  * :: DeveloperApi ::
  * A stream for writing serialized objects.
- */
-@DeveloperApi
+  *
+  * 序列化流  负责将对象写出到序列化流
+  * */
 abstract class SerializationStream {
   /** The most general-purpose method to write an object. */
   def writeObject[T: ClassTag](t: T): SerializationStream
@@ -152,8 +106,8 @@ abstract class SerializationStream {
 /**
  * :: DeveloperApi ::
  * A stream for reading serialized objects.
+  * 反序列化抽象 负责将对象反序列化为JAVA对象
  */
-@DeveloperApi
 abstract class DeserializationStream {
   /** The most general-purpose method to read an object. */
   def readObject[T: ClassTag](): T
@@ -166,6 +120,7 @@ abstract class DeserializationStream {
   /**
    * Read the elements of this stream through an iterator. This can only be called once, as
    * reading each element will consume data from the input source.
+    *
    */
   def asIterator: Iterator[Any] = new NextIterator[Any] {
     override protected def getNext() = {
