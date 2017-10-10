@@ -3,9 +3,9 @@ package com.ning.serializer.usejava;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.twitter.chill.EmptyScalaKryoInstantiator;
-import com.twitter.chill.KryoBase;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
@@ -37,12 +37,41 @@ public class KryoSerializer extends Serializer{
     }
 }
 class KryoSerializationStream extends SerializationStream{
-    private Output out ;
+    private Output output ;
     private Kryo kryo ;
+    private KryoSerializerInstance serInstance;
 
     public KryoSerializationStream(KryoSerializerInstance serInstance,OutputStream outStream){
-        out = new Output(outStream);
-        kryo = serInstance;
+        output = new Output(outStream);
+        this.serInstance = serInstance;
+        kryo = serInstance.borrowKryo();
+    }
+
+    @Override
+    public void flush(){
+        if (output == null) {
+            throw new RuntimeException("Stream is closed");
+        }
+        output.flush();
+    }
+
+    @Override
+    public void close() {
+        if (output != null) {
+            try {
+                output.close();
+            } finally {
+                serInstance.releaseKryo(kryo);
+                kryo = null ;
+                output = null;
+            }
+        }
+    }
+
+    @Override
+    public <T> SerializationStream writeObject(T t) {
+        kryo.writeObject(output,t);
+        return this;
     }
 }
 class KryoSerializerInstance extends SerializerInstance{
@@ -91,5 +120,23 @@ class KryoSerializerInstance extends SerializerInstance{
         return (T)obj;
     }
 
+    @Override
+    public <T> T deserialize(ByteBuffer bytes, ClassLoader loader) {
+        return null;
+    }
 
+    @Override
+    public SerializationStream serializeStream(OutputStream s) {
+        return new KryoSerializationStream(this,s);
+    }
+
+    @Override
+    public DeserializationStream deserializeStream(InputStream s) {
+        return null;
+    }
+
+    @Override
+    public DeserializationStream deserializeStream(InputStream s, ClassLoader classLoader) {
+        return null;
+    }
 }
