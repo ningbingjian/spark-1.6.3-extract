@@ -73,7 +73,7 @@ Dispatcher.registerRpcEndpoint -> 注册了masterEndpoint
 	4>启动masterMetricsSystem
 	5>配置恢复选项 zookeeper可完成高可用
 ```
-# 如何实现Master的高可用?
+# 如何实现Master的高可用?(standalone模式)
 ```
     0>spark master高可用是基于curator框架之上的实现
     1>Master.onStart方法
@@ -128,15 +128,23 @@ Dispatcher.registerRpcEndpoint -> 注册了masterEndpoint
             第二步 如果状态是正在恢复 RECOVERING 开始启动恢复恢复完成后发送一个CompleteRecovery消息给自己   
             
            }
-     9> 如果恢复zk数据
+     9> 选举出新的master如何接管集群
         master需要恢复的数据包含三类
-        1.app 重新向master注册app即可：app状态修改为UNKNOWN,想driver发送MasterChanged
-        2.
-    
-      
-      
-      
+            app信息恢复
+                0.新的master从zk读取app的信息
+                1.master向所有app发送MasterChanged消息,并且app状态修改为UNKNOWN,想driver[实际是ClientApp.ClientEndpoint]发送MasterChanged
+                2.driver端[实际是ClientApp.ClientEndpoint接收到masterChange的消息后修改masterRef
+            driver信息恢复:
+                0.从zk读取driver信息
+                1.新的master有个成员变量drivers drivers += driver
+            worker信息恢复:
+                0.从zk恢复worker信息
+                1.遍历worker重新在master端走一遍worker注册流程
+                2.向所有的worker发送MasterChanged消息
+                3.worker接收到MasterChanged消息,修改master地址
+                发送worker当前的调度状态WorkerSchedulerStateResponse给master[包括workerId,executor信息,app信息,driver信息,executor状态 ]      
 ```
+
 
 
 
